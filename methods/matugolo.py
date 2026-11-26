@@ -42,6 +42,47 @@ def find_bundles(ev: Evaluator, threshold: float = 1e-4) -> list[tuple[int, int,
     return out
 
 
+def bundle_greedy(ev: Evaluator, bundles: list[tuple[int, int, float]]) -> tuple[list[str], list[dict]]:
+    """束を考慮した貪欲法。
+
+    各ステップで、未復旧の単独の橋 i(改善量 / days_i)と、両方未復旧の束 {i, j}
+    (2本開けた改善量 / (days_i + days_j))を、**現在の状態で**比べて比率最大を採る。
+    同率なら単独を優先し、次に bridge_id 順。束は日数の長い方を先に並べる。
+    最大の改善量が 0 以下なら、残りを (日数, bridge_id) の昇順に並べて終わる。
+    戻り値: (順序, ログ[{step, kind, bridges, gain, ratio}])
+    """
+    days = [ev.repair_days[b] for b in ev.ids]
+    closed = set(ev.all_closed())
+    order: list[str] = []
+    log: list[dict] = []
+    while closed:
+        base = ev.accessibility(frozenset(closed))[0]
+        cands = []  # (key, members, gain, ratio, kind)
+        for i in closed:
+            gain = base - ev.accessibility(frozenset(closed - {i}))[0]
+            r = gain / days[i]
+            cands.append(((-r, 0, ev.ids[i]), [i], gain, r, "single"))
+        for i, j, _ in bundles:
+            if i in closed and j in closed:
+                gain = base - ev.accessibility(frozenset(closed - {i, j}))[0]
+                r = gain / (days[i] + days[j])
+                mem = sorted([i, j], key=lambda k: (-days[k], ev.ids[k]))
+                cands.append(((-r, 1, min(ev.ids[i], ev.ids[j])), mem, gain, r, "bundle"))
+        if max(c[2] for c in cands) <= 0:
+            for i in sorted(closed, key=lambda k: (days[k], ev.ids[k])):
+                order.append(ev.ids[i])
+                log.append({"step": len(log) + 1, "kind": "fallback", "bridges": [ev.ids[i]],
+                            "gain": 0.0, "ratio": 0.0})
+            break
+        _, mem, gain, r, kind = min(cands, key=lambda c: c[0])
+        for k in mem:
+            order.append(ev.ids[k])
+            closed.discard(k)
+        log.append({"step": len(log) + 1, "kind": kind, "bridges": [ev.ids[k] for k in mem],
+                    "gain": gain, "ratio": r})
+    return order, log
+
+
 def solve(ev: Evaluator) -> list[str]:
     """復旧する順に bridge_id を並べたリストを返す。
 
