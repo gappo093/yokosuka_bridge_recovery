@@ -113,7 +113,7 @@ WSL でブラウザが開かないときは、表示された URL を Windows �
 
 ```bash
 cd ~
-git clone <授業で案内するリポジトリURL> yokosuka-bridge-recovery
+git clone https://github.com/gappo093/yokosuka_bridge_recovery.git yokosuka-bridge-recovery
 cd yokosuka-bridge-recovery
 uv venv && source .venv/bin/activate
 uv pip install -r requirements.txt
