@@ -8,6 +8,7 @@
 """
 from __future__ import annotations
 
+import random
 import sys
 from itertools import combinations
 from pathlib import Path
@@ -81,6 +82,45 @@ def bundle_greedy(ev: Evaluator, bundles: list[tuple[int, int, float]]) -> tuple
         log.append({"step": len(log) + 1, "kind": kind, "bridges": [ev.ids[k] for k in mem],
                     "gain": gain, "ratio": r})
     return order, log
+
+
+def local_search(ev: Evaluator, order: list[str], max_evals: int = 2000,
+                 seed: int = 2026) -> tuple[list[str], list[dict]]:
+    """入れ替え(swap)と挿入(insert)による山登り法(first-improvement)。
+
+    近傍の並びは random.Random(seed) で1回だけシャッフルする(再現性のため)。
+    改善(1e-9 より大きく下がる)した時点で採用し、近傍の先頭から走査し直す。
+    1周して改善がないか、ev.evaluate の呼び出しが max_evals 回に達したら終わる。
+    戻り値: (順序, 採用した移動[{move, a, b, before, after}])(a, b は順序上の位置)
+    """
+    n = len(order)
+    moves = [("swap", a, b) for a in range(n) for b in range(a + 1, n)]
+    moves += [("insert", a, b) for a in range(n) for b in range(n) if a != b]
+    random.Random(seed).shuffle(moves)
+
+    cur = list(order)
+    cur_score = ev.evaluate(cur).score_minutes
+    evals = 1
+    log: list[dict] = []
+    improved = True
+    while improved and evals < max_evals:
+        improved = False
+        for kind, a, b in moves:
+            if evals >= max_evals:
+                break
+            cand = list(cur)
+            if kind == "swap":
+                cand[a], cand[b] = cand[b], cand[a]
+            else:
+                cand.insert(b, cand.pop(a))
+            s = ev.evaluate(cand).score_minutes
+            evals += 1
+            if s < cur_score - 1e-9:
+                log.append({"move": kind, "a": a, "b": b, "before": cur_score, "after": s})
+                cur, cur_score = cand, s
+                improved = True
+                break
+    return cur, log
 
 
 def solve(ev: Evaluator) -> list[str]:
