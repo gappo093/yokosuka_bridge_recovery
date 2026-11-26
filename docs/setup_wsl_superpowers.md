@@ -109,12 +109,30 @@ WSL でブラウザが開かないときは、表示された URL を Windows �
 - WSL ではリポジトリを **Linux 側のホーム(`~`)** に置く。`/mnt/c/...`(Windows のフォルダ)に置くと非常に遅くなります
 - Windows で直接作業する場合も、**OneDrive の同期フォルダの中には置かない**(`.venv` の同期で壊れやすい)
 
-### D-2. 取得とセットアップ
+### D-2. 自分用のコピー(Fork)を作る
+
+演習リポジトリは全員共通なので、直接は変更できません。各自が **Fork(自分のアカウントへのコピー)** を作り、そこで作業して、提出は Pull Request で送ります。
+
+1. GitHub アカウントを用意する(なければ https://github.com/signup で作成)。ユーザー名は公開されるので、本名・学籍番号を避けるのがおすすめ
+2. https://github.com/gappo093/yokosuka_bridge_recovery を開き、右上の **Fork** → **Create fork**
+3. Ubuntu ターミナルで GitHub CLI を入れてログインする(push のときの認証に使う):
+
+   ```bash
+   sudo apt install -y gh
+   gh auth login
+   ```
+
+   質問には「GitHub.com」「HTTPS」「Login with a web browser」を選び、表示されたコードをブラウザで入力します。
+
+### D-3. 取得とセットアップ
+
+`<自分のユーザー名>` は自分の GitHub ユーザー名に置き換えてください。
 
 ```bash
 cd ~
-git clone https://github.com/gappo093/yokosuka_bridge_recovery.git yokosuka-bridge-recovery
+git clone https://github.com/<自分のユーザー名>/yokosuka_bridge_recovery.git yokosuka-bridge-recovery
 cd yokosuka-bridge-recovery
+git remote add upstream https://github.com/gappo093/yokosuka_bridge_recovery.git
 uv venv && source .venv/bin/activate
 uv pip install -r requirements.txt
 python -m pytest
@@ -128,7 +146,7 @@ python scripts/run_baselines.py
 
 ベースライン4種のスコア表が出れば準備完了です。
 
-### D-3. VS Code から使う(任意)
+### D-4. VS Code から使う(任意)
 
 1. Windows 側の VS Code に拡張機能「**WSL**」(Microsoft)を入れる
 2. Ubuntu ターミナルでリポジトリに移動して `code .`
@@ -193,6 +211,7 @@ Superpowers は Claude Code のプラグインで、「いきなりコードを�
 ## チェックリスト(第1回までに)
 
 - [ ] `wsl -l -v` で VERSION 2(Windows のみ)
+- [ ] 演習リポジトリを Fork し、自分の Fork を clone した
 - [ ] `uv --version` が表示される
 - [ ] `claude` で配付アカウントにログインできる
 - [ ] `python -m pytest` が `8 passed`

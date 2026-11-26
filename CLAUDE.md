@@ -5,7 +5,8 @@
 ## 守ること
 - `bridgerecovery/evaluate.py`(評価関数)と `data/` 以下は全員共通。学生の手法のために変更しない。
 - `scripts/fetch_yokosuka.py` / `scripts/make_scenario.py` は実行しない(OSM の更新で橋の ID が変わり、スコアが比較不能になる)。
-- 学生の手法は `bridgerecovery/baselines.py` と同じ `(ev: Evaluator) -> list[str]` の形で、自分用のファイル(例: `methods/<名前>.py`)に書く。
+- 学生が変更してよいのは `methods/<GitHubユーザー名>.py` と `submissions/<GitHubユーザー名>.json` だけ。手法は `methods/template.py` をコピーし、`solve(ev) -> list[str]` を書き換える。それ以外のファイルを変更すると Pull Request の自動チェックで不合格になる。
+- 提出は Fork + Pull Request(README の「提出のしかた」)。ファイル名に学籍番号・本名を使わない(公開リポジトリ)。
 - 被災シナリオは架空。実在の被害であるかのような説明文を書かない。
 
 ## コマンド

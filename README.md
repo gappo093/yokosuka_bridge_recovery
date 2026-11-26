@@ -90,29 +90,60 @@ python scripts/make_scenario.py    # 仮の被災橋梁リストを作成(--n, -
 
 ## 4. 自分の手法を作る
 
-1. `bridgerecovery/baselines.py` と同じ形 `def my_method(ev: Evaluator) -> list[str]` で関数を書く
-2. `ev.accessibility(closed)` で「この橋たちが閉鎖中のときのアクセス性」を何度でも計算できる(結果はキャッシュされる)
-3. 提出ファイルを書き出して評価する
+**変更してよいのは `methods/<GitHubユーザー名>.py` と `submissions/<GitHubユーザー名>.json` だけです。**
+共通コード(`bridgerecovery/`, `scripts/`, `data/`, `tests/` など)は変更しないでください。
+直してほしい点があれば Issue で知らせてください。
 
-```python
-from bridgerecovery.io import load_graph, load_scenario, save_order
-from bridgerecovery.evaluate import Evaluator
-
-ev = Evaluator(load_graph(), load_scenario())
-order = my_method(ev)
-print(ev.evaluate(order).summary())
-save_order(order, "submissions/<学籍番号>.json", method="my_method", author="<名前>")
+```bash
+git switch -c my-method                       # 作業用ブランチ
+cp methods/template.py methods/<GitHubユーザー名>.py
+# solve() を自分の手法に書き換える
+python methods/<GitHubユーザー名>.py          # スコアを表示し、submissions/<GitHubユーザー名>.json を書き出す
 ```
+
+`solve(ev)` の中では次が使えます。
+`ev.accessibility(closed)` は「この橋たちが閉鎖中のときのアクセス性」を返し、何度呼んでもかまいません(結果はキャッシュされます)。
+`ev.evaluate(order)` は順序全体のスコアを返すので、試行錯誤に使えます。
 
 提出ファイルの書式: `{"method": "...", "author": "...", "order": ["B0006", "B0009", ...]}`
 (被災橋梁30橋を重複なく1回ずつ並べる。CSV なら `bridge_id` 列を上から順に)
 
 改善のヒント: 2本そろって初めて効く橋の組合せ、3班が並行して動くこと、局所探索(2橋の入れ替え)、焼きなまし など。
 
-## 5. ファイル構成
+## 5. 提出のしかた(Fork + Pull Request)
+
+環境構築の手順書(D-2, D-3)で、自分の Fork を clone してある前提です。
+
+```bash
+git add methods/<GitHubユーザー名>.py submissions/<GitHubユーザー名>.json
+git commit -m "Add <手法名>"
+git push -u origin my-method
+```
+
+push すると GitHub に「Compare & pull request」ボタンが出るので、押して Pull Request を作ります(送り先は `gappo093/yokosuka_bridge_recovery` の `main`)。
+本文のテンプレートに手法の説明を書いてください。
+
+Pull Request を作ると、自動チェック(GitHub Actions)が次を確認します。
+
+1. `methods/` と `submissions/` 以外を変更していないか(変更があると ✗ になります)
+2. 評価関数のテストが通るか
+3. 提出ファイルを評価できるか(ログにスコアが表示されます)
+
+✗ になったら、Pull Request の「Checks」タブでログを見て直し、もう一度 push してください(同じ Pull Request に反映されます)。
+
+共通リポジトリが更新されたときは、次のように取り込みます。
+
+```bash
+git switch main
+git pull upstream main
+git push origin main
+```
+
+## 6. ファイル構成
 
 ```
-bridgerecovery/        共通コード(原則として変更しない。直したい点は Issue で)
+methods/               各自の手法(template.py をコピーして使う)
+bridgerecovery/        共通コード(変更しない。直したい点は Issue で)
   evaluate.py          評価関数 Evaluator, make_schedule
   baselines.py         ベースライン
   bridges.py           道路網からの橋梁抽出
@@ -121,7 +152,8 @@ bridgerecovery/        共通コード(原則として変更しない。直し�
 scripts/               実行スクリプト
 data/raw/              道路網 graphml・病院・全橋梁リスト(共通)
 data/scenario/         仮の被災シナリオ(共通)
-submissions/           提出ファイル
+submissions/           提出ファイル(baseline_*.json は書式の例)
+.github/               Pull Request の自動チェックとテンプレート
 tests/                 評価関数のテスト
 docs/                  環境構築の手順書
 ```
