@@ -90,14 +90,17 @@ def bundle_greedy(ev: Evaluator, bundles: list[tuple[int, int, float]]) -> tuple
     return order, log
 
 
-def local_search(ev: Evaluator, order: list[str], max_evals: int = 2000,
-                 seed: int = 2026) -> tuple[list[str], list[dict]]:
+def local_search(ev: Evaluator, order: list[str], max_evals: int = 5000,
+                 seed: int = 2026, stats: dict | None = None) -> tuple[list[str], list[dict]]:
     """入れ替え(swap)と挿入(insert)による山登り法(first-improvement)。
 
     近傍の並びは random.Random(seed) で1回だけシャッフルする(再現性のため)。
     改善(1e-9 より大きく下がる)した時点で採用し、近傍の先頭から走査し直す。
     1周して改善がないか、ev.evaluate の呼び出しが max_evals 回に達したら終わる。
     戻り値: (順序, 採用した移動[{move, a, b, before, after}])(a, b は順序上の位置)
+    stats に辞書を渡すと {"evals": 評価回数, "converged": 1周改善なしで止まったか} を書き込む
+    (False なら max_evals で打ち切り)。30橋の近傍は 1305 通り。max_evals=2000 では
+    実データで打ち切られたため、既定値を 5000 にした(2026-11-26 時点で約4000回強で収束)。
     """
     n = len(order)
     moves = [("swap", a, b) for a in range(n) for b in range(a + 1, n)]
@@ -108,11 +111,12 @@ def local_search(ev: Evaluator, order: list[str], max_evals: int = 2000,
     cur_score = ev.evaluate(cur).score_minutes
     evals = 1
     log: list[dict] = []
-    improved = True
-    while improved and evals < max_evals:
+    improved, budget_hit = True, False
+    while improved and not budget_hit:
         improved = False
         for kind, a, b in moves:
             if evals >= max_evals:
+                budget_hit = True
                 break
             cand = list(cur)
             if kind == "swap":
@@ -126,6 +130,8 @@ def local_search(ev: Evaluator, order: list[str], max_evals: int = 2000,
                 cur, cur_score = cand, s
                 improved = True
                 break
+    if stats is not None:
+        stats.update({"evals": evals, "converged": not improved and not budget_hit})
     return cur, log
 
 
@@ -151,22 +157,24 @@ def report(ev: Evaluator) -> list[str]:
               f"改善={e['gain']:.4f} 分  比率={e['ratio']:.5f}")
 
     rows = []
-    def add(label, order, sec=0.0, moves=None):
+    def add(label, order, sec=0.0, moves=None, st=None):
         r = ev.evaluate(order)
-        rows.append((label, r.score_minutes, r.normalized, r.makespan_days, sec, moves))
+        stop = "" if st is None else f"{st['evals']}/{'収束' if st['converged'] else '打切'}"
+        rows.append((label, r.score_minutes, r.normalized, r.makespan_days, sec, moves, stop))
 
     g = greedy_impact_per_day(ev)
     add("greedy", g)
-    t = time.perf_counter(); g_ls, g_log = local_search(ev, g)
-    add("greedy+LS", g_ls, time.perf_counter() - t, len(g_log))
+    st_g, st_b = {}, {}
+    t = time.perf_counter(); g_ls, g_log = local_search(ev, g, stats=st_g)
+    add("greedy+LS", g_ls, time.perf_counter() - t, len(g_log), st_g)
     add("bundle_greedy", start)
-    t = time.perf_counter(); final, b_log = local_search(ev, start)
-    add("bundle_greedy+LS", final, time.perf_counter() - t, len(b_log))
+    t = time.perf_counter(); final, b_log = local_search(ev, start, stats=st_b)
+    add("bundle_greedy+LS", final, time.perf_counter() - t, len(b_log), st_b)
 
     print("[3] 比較(score は小さいほど良い)")
-    print(f"    {'method':18s} {'score[分]':>10s} {'normalized':>10s} {'全橋復旧[日]':>12s} {'LS秒':>6s} {'LS移動':>6s}")
-    for label, sc, nm, mk, sec, mv in rows:
-        print(f"    {label:18s} {sc:10.4f} {nm:10.4f} {mk:12.1f} {sec:6.1f} {'' if mv is None else mv:>6}")
+    print(f"    {'method':18s} {'score[分]':>10s} {'normalized':>10s} {'全橋復旧[日]':>12s} {'LS秒':>6s} {'LS移動':>6s} {'評価回数/停止':>12s}")
+    for label, sc, nm, mk, sec, mv, stop in rows:
+        print(f"    {label:18s} {sc:10.6f} {nm:10.4f} {mk:12.1f} {sec:6.1f} {'' if mv is None else mv:>6} {stop:>12s}")
 
     print("[4] bundle_greedy+LS で採用した移動(位置は 0 始まり)")
     for e in b_log:
