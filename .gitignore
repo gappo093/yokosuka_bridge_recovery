@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# OSMnx の API キャッシュと各自の実行結果
+data/cache/
+results/
+
+# data/raw/ と data/scenario/ はコミットする。
+# OSM は日々更新されるため、各自が取り直すと橋の ID・辺が変わり、スコアを比べられなくなる。

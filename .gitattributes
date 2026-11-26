@@ -1,0 +1,5 @@
+# Windows と WSL/macOS で改行コードをそろえる
+* text=auto eol=lf
+# 共通データは1バイトも変えない
+*.graphml -text
+*.png binary
