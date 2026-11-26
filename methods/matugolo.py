@@ -1,10 +1,14 @@
-"""自分の手法のひな形。このファイルをコピーして methods/<GitHubユーザー名>.py を作る。
+"""ペア束貪欲法 + 局所探索(作者: matugolo)。
 
-    cp methods/template.py methods/<GitHubユーザー名>.py
-    python methods/<GitHubユーザー名>.py
-        -> 評価結果を表示し、submissions/<GitHubユーザー名>.json を書き出す
+    python methods/matugolo.py
+        -> 束の表・束貪欲のステップ・手法比較を表示し、submissions/matugolo.json を書き出す
 
-変更してよいのは methods/ と submissions/ の自分のファイルだけです(共通コードは変更しない)。
+考え方:
+  1. find_bundles   全閉鎖の状態で「2本そろって初めて効く橋の組」(相乗効果 > 1e-4 分)を探す。
+  2. bundle_greedy  単独の橋と束を「現在の状態での改善量 / 班日数」で比べ、大きい順に並べる。
+                    貪欲法(1橋ずつ)では改善 0 に見えて後回しになる橋を、相方と一緒に早められる。
+  3. local_search   入れ替え・挿入の山登り(シード 2026、評価回数の上限 max_evals)で仕上げる。
+シナリオは演習用の架空のもの。
 """
 from __future__ import annotations
 
@@ -16,7 +20,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from bridgerecovery.baselines import shortest_repair_first
+import time
+
+from bridgerecovery.baselines import greedy_impact_per_day
 from bridgerecovery.evaluate import Evaluator
 from bridgerecovery.io import load_graph, load_scenario, save_order
 
@@ -124,28 +130,55 @@ def local_search(ev: Evaluator, order: list[str], max_evals: int = 2000,
 
 
 def solve(ev: Evaluator) -> list[str]:
-    """復旧する順に bridge_id を並べたリストを返す。
+    """束貪欲の順序を初期解として局所探索をかけた順序を返す。"""
+    start, _ = bundle_greedy(ev, find_bundles(ev))
+    order, _ = local_search(ev, start)
+    return order
 
-    使える情報:
-        ev.ids                      被災橋梁の bridge_id のリスト
-        ev.repair_days[bid]         各橋の復旧日数
-        ev.scenario.crews           復旧班の数
-        ev.scenario.bridges         各橋の詳細(名前・道路種別・長さ・座標・辺)
-        ev.accessibility(closed)    閉鎖中の橋(ev.ids のインデックス集合)でのアクセス性
-        ev.evaluate(order)          順序全体のスコア(試行錯誤に使ってよい)
-    """
-    # ここを自分の手法に書き換える(今は「復旧日数の短い順」のまま)
-    return shortest_repair_first(ev)
+
+def report(ev: Evaluator) -> list[str]:
+    """束の表・束貪欲のステップ・手法比較を表示し、最終順序(solve と同じ)を返す。"""
+    ids, days = ev.ids, ev.repair_days
+    bundles = find_bundles(ev)
+    print(f"[1] 相乗効果のある組(全閉鎖から開けた場合): {len(bundles)} 組")
+    for i, j, syn in bundles:
+        print(f"    {ids[i]} + {ids[j]}  syn={syn:+.4f} 分  日数 {days[ids[i]]:g}/{days[ids[j]]:g}")
+
+    start, glog = bundle_greedy(ev, bundles)
+    print("[2] 束貪欲のステップ")
+    for e in glog:
+        print(f"    {e['step']:2d} {e['kind']:8s} {'+'.join(e['bridges']):13s} "
+              f"改善={e['gain']:.4f} 分  比率={e['ratio']:.5f}")
+
+    rows = []
+    def add(label, order, sec=0.0, moves=None):
+        r = ev.evaluate(order)
+        rows.append((label, r.score_minutes, r.normalized, r.makespan_days, sec, moves))
+
+    g = greedy_impact_per_day(ev)
+    add("greedy", g)
+    t = time.perf_counter(); g_ls, g_log = local_search(ev, g)
+    add("greedy+LS", g_ls, time.perf_counter() - t, len(g_log))
+    add("bundle_greedy", start)
+    t = time.perf_counter(); final, b_log = local_search(ev, start)
+    add("bundle_greedy+LS", final, time.perf_counter() - t, len(b_log))
+
+    print("[3] 比較(score は小さいほど良い)")
+    print(f"    {'method':18s} {'score[分]':>10s} {'normalized':>10s} {'全橋復旧[日]':>12s} {'LS秒':>6s} {'LS移動':>6s}")
+    for label, sc, nm, mk, sec, mv in rows:
+        print(f"    {label:18s} {sc:10.4f} {nm:10.4f} {mk:12.1f} {sec:6.1f} {'' if mv is None else mv:>6}")
+
+    print("[4] bundle_greedy+LS で採用した移動(位置は 0 始まり)")
+    for e in b_log:
+        print(f"    {e['move']:6s} {e['a']:2d}->{e['b']:2d}  {e['before']:.4f} -> {e['after']:.4f}")
+    return final
 
 
 if __name__ == "__main__":
     name = Path(__file__).stem
     ev = Evaluator(load_graph(), load_scenario())
-    order = solve(ev)
+    order = report(ev)
     print(ev.evaluate(order).summary())
-    if name != "template":
-        out = ROOT / "submissions" / f"{name}.json"
-        save_order(order, out, method=METHOD_NAME, author=name)
-        print(f"-> {out}")
-    else:
-        print("(template.py のままでは提出ファイルを書き出しません。コピーしてから実行してください)")
+    out = ROOT / "submissions" / f"{name}.json"
+    save_order(order, out, method=METHOD_NAME, author=name)
+    print(f"-> {out}")
